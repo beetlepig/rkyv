@@ -1,6 +1,5 @@
 //! Validation implementations and helper types.
 
-pub mod owned;
 pub mod validators;
 
 use crate::{Archive, ArchivePointee, CheckBytes, Fallible, RelPtr};
@@ -329,17 +328,13 @@ impl<T: Error + 'static, C: Error + 'static> Error for CheckArchiveError<T, C> {
     }
 }
 
-/// The error type that can be produced by checking the given type with the given validator.
-pub type CheckTypeError<T, C> =
-    CheckArchiveError<<T as CheckBytes<C>>::Error, <C as Fallible>::Error>;
-
 // TODO: change this to be the public-facing API (uses pos: isize instead of pos: usize)
 #[inline]
 fn internal_check_archived_value_with_context<'a, T, C>(
     buf: &'a [u8],
     pos: isize,
     context: &mut C,
-) -> Result<&'a T::Archived, CheckTypeError<T::Archived, C>>
+) -> Result<&'a T::Archived, C::Error>
 where
     T: Archive,
     T::Archived: CheckBytes<C> + Pointee<Metadata = ()>,
@@ -372,7 +367,7 @@ pub fn check_archived_value_with_context<'a, T, C>(
     buf: &'a [u8],
     pos: usize,
     context: &mut C,
-) -> Result<&'a T::Archived, CheckTypeError<T::Archived, C>>
+) -> Result<&'a T::Archived, C::Error>
 where
     T: Archive,
     T::Archived: CheckBytes<C> + Pointee<Metadata = ()>,
@@ -392,7 +387,7 @@ where
 pub fn check_archived_root_with_context<'a, T, C>(
     buf: &'a [u8],
     context: &mut C,
-) -> Result<&'a T::Archived, CheckTypeError<T::Archived, C>>
+) -> Result<&'a T::Archived, C::Error>
 where
     T: Archive,
     T::Archived: CheckBytes<C> + Pointee<Metadata = ()>,

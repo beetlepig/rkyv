@@ -1,6 +1,6 @@
 //! [`Archive`](crate::Archive) implementation for B-tree maps.
 
-#[cfg(feature = "validation")]
+#[cfg(feature = "bytecheck")]
 pub mod validation;
 
 use crate::{
@@ -20,12 +20,14 @@ use core::{
 use ptr_meta::Pointee;
 
 #[cfg_attr(feature = "strict", repr(C))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 struct InnerNodeEntry<K> {
     ptr: RelPtr<NodeHeader>,
     key: K,
 }
 
 #[cfg_attr(feature = "strict", repr(C))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 struct LeafNodeEntry<K, V> {
     key: K,
     value: V,
@@ -97,7 +99,7 @@ struct Node<T: ?Sized> {
     tail: T,
 }
 
-impl<T> Pointee for Node<[T]> {
+unsafe impl<T> Pointee for Node<[T]> {
     type Metadata = usize;
 }
 

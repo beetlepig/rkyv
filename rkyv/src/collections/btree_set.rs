@@ -5,7 +5,7 @@ use core::{borrow::Borrow, fmt};
 
 /// An archived `BTreeSet`. This is a wrapper around a B-tree map with the same key and a value of
 /// `()`.
-#[cfg_attr(feature = "validation", derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[derive(Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct ArchivedBTreeSet<K>(ArchivedBTreeMap<K, ()>);

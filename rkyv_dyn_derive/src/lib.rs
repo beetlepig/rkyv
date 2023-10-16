@@ -309,7 +309,7 @@ pub fn archive_dyn(
                 quote! { f(stringify!(dyn #deserialize_trait)); }
             };
 
-            #[cfg(feature = "validation")]
+            #[cfg(feature = "bytecheck")]
             let validation_impl = quote! {
                 use bytecheck::CheckBytes;
                 use rkyv::validation::LayoutRaw;
@@ -346,7 +346,7 @@ pub fn archive_dyn(
                 }
             };
 
-            #[cfg(not(feature = "validation"))]
+            #[cfg(not(feature = "bytecheck"))]
             let validation_impl = quote! {};
 
             quote! {

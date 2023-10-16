@@ -94,11 +94,12 @@ mod tests {
     use crate::{
         archived_root,
         ser::{serializers::AllocSerializer, Serializer},
-        Deserialize, Infallible,
+        Deserialize,
     };
     #[cfg(all(feature = "alloc", not(feature = "std")))]
     use alloc::string::String;
     use hashbrown::HashSet;
+    use rancor::Failure;
 
     #[test]
     fn index_set() {
@@ -121,11 +122,11 @@ mod tests {
         }
 
         let deserialized: HashSet<String> =
-            archived.deserialize(&mut Infallible).unwrap();
+            archived.deserialize(&mut Failure).unwrap();
         assert_eq!(value, deserialized);
     }
 
-    #[cfg(feature = "validation")]
+    #[cfg(feature = "bytecheck")]
     #[test]
     fn validate_index_set() {
         use crate::check_archived_root;

@@ -2,7 +2,7 @@ use crate::{
     bytecheck::CheckBytes,
     check_archived_root,
     de::deserializers::SharedDeserializeMap,
-    validation::validators::{CheckTypeError, DefaultValidator},
+    validation::validators::DefaultValidator,
     Archive, Deserialize, Fallible,
 };
 use core::fmt;
@@ -43,12 +43,6 @@ const _: () = {
     }
 };
 
-/// The error type for [`from_bytes`].
-pub type FromBytesError<'a, T> = CheckDeserializeError<
-    CheckTypeError<<T as Archive>::Archived, DefaultValidator<'a>>,
-    <SharedDeserializeMap as Fallible>::Error,
->;
-
 /// Checks and deserializes a value from the given bytes.
 ///
 /// This function is only available with the `alloc` and `validation` features because it uses a
@@ -66,7 +60,7 @@ pub type FromBytesError<'a, T> = CheckDeserializeError<
 /// assert_eq!(deserialized, value);
 /// ```
 #[inline]
-pub fn from_bytes<'a, T>(bytes: &'a [u8]) -> Result<T, FromBytesError<'a, T>>
+pub fn from_bytes<'a, T>(bytes: &'a [u8]) -> Result<T, <SharedDeserializeMap as Fallible>::Error>
 where
     T: Archive,
     T::Archived: 'a

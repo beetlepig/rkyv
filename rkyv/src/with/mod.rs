@@ -248,6 +248,7 @@ where
 /// A wrapper to make a type immutable.
 #[repr(transparent)]
 #[derive(Debug)]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 pub struct Immutable<T: ?Sized>(T);
 
 impl<T: ?Sized> Immutable<T> {
@@ -266,23 +267,6 @@ impl<T: ?Sized> Deref for Immutable<T> {
         &self.0
     }
 }
-
-#[cfg(feature = "validation")]
-const _: () = {
-    use bytecheck::CheckBytes;
-
-    impl<T: CheckBytes<C> + ?Sized, C: ?Sized> CheckBytes<C> for Immutable<T> {
-        type Error = T::Error;
-
-        unsafe fn check_bytes<'a>(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<&'a Self, Self::Error> {
-            CheckBytes::check_bytes(core::ptr::addr_of!((*value).0), context)?;
-            Ok(&*value)
-        }
-    }
-};
 
 /// A generic wrapper that allows wrapping an `Option<T>`.
 ///

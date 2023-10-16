@@ -74,7 +74,7 @@
 //!   *Note*: Enabling `strict` will disable [`Archive`] implementations for tuples, as tuples
 //!   do not have a C type layout. Making a generic `Tuple<T1, T2>` and deriving [`Archive`] for it
 //!   should provide similar functionality.
-//! - `validation`: Enables validation support through `bytecheck`.
+//! - `bytecheck`: Enables validation support through `bytecheck`.
 //!
 //! ## Crate support
 //!
@@ -163,22 +163,23 @@ pub mod ser;
 pub mod string;
 pub mod time;
 pub mod util;
-#[cfg(feature = "validation")]
+#[cfg(feature = "bytecheck")]
 pub mod validation;
 pub mod vec;
 pub mod with;
 
 pub use rend;
 
-#[cfg(feature = "validation")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "validation")))]
+#[cfg(feature = "bytecheck")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "bytecheck")))]
 pub use bytecheck::{self, CheckBytes};
 use core::alloc::Layout;
 use ptr_meta::Pointee;
+pub use rancor::Fallible;
 pub use rkyv_derive::{Archive, Deserialize, Serialize};
 pub use util::*;
-#[cfg(feature = "validation")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "validation")))]
+#[cfg(feature = "bytecheck")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "bytecheck")))]
 pub use validation::{
     check_archived_root_with_context, check_archived_value_with_context,
     validators::{check_archived_root, check_archived_value, from_bytes},
@@ -230,36 +231,6 @@ core::compile_error!(
     features. You may need to set `default-features = false` or compile with \
     `--no-default-features`."
 );
-
-/// A type that can produce an error.
-///
-/// This trait is always implemented by serializers and deserializers. Its purpose is to provide an
-/// error type without restricting what other capabilities the type must provide.
-///
-/// When writing implementations for [`Serialize`] and [`Deserialize`], it's best practice to bound
-/// the serializer or deserializer by `Fallible` and then require that the serialized types support
-/// it (i.e. `S: Fallible, MyType: Serialize<S>`).
-pub trait Fallible {
-    /// The error produced by any failing methods.
-    type Error: 'static;
-}
-
-/// A fallible type that cannot produce errors.
-///
-/// This type can be used to serialize and deserialize types that cannot fail to serialize or
-/// deserialize.
-#[derive(Debug)]
-pub struct Infallible;
-
-impl Fallible for Infallible {
-    type Error = ::core::convert::Infallible;
-}
-
-impl Default for Infallible {
-    fn default() -> Self {
-        Infallible
-    }
-}
 
 /// A type that can be used without deserializing.
 ///
@@ -318,7 +289,7 @@ impl Default for Infallible {
 /// serializer.serialize_value(&value).unwrap();
 /// let bytes = serializer.into_serializer().into_inner();
 ///
-/// // You can use the safe API with the validation feature turned on,
+/// // You can use the safe API with the `bytecheck` feature enabled,
 /// // or you can use the unsafe API (shown here) for maximum performance
 /// let archived = unsafe { rkyv::archived_root::<Test>(&bytes[..]) };
 /// assert_eq!(archived, &value);
@@ -328,7 +299,7 @@ impl Default for Infallible {
 /// assert_eq!(deserialized, value);
 /// ```
 ///
-/// _Note: the safe API requires the `validation` feature._
+/// _Note: the safe API requires the `bytecheck` feature._
 ///
 /// Many of the core and standard library types already have `Archive` implementations available,
 /// but you may need to implement `Archive` for your own types in some cases the derive macro cannot

@@ -13,7 +13,7 @@ use crate::{
 use core::{borrow::Borrow, fmt, hash::Hash};
 
 /// An archived `IndexSet`.
-#[cfg_attr(feature = "validation", derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[repr(transparent)]
 pub struct ArchivedIndexSet<K> {
     inner: ArchivedIndexMap<K, ()>,

@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(value, deserialized);
     }
 
-    #[cfg(feature = "validation")]
+    #[cfg(feature = "bytecheck")]
     #[test]
     fn validate_index_set() {
         use crate::check_archived_root;

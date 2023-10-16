@@ -108,7 +108,7 @@ mod tests {
         test_archive::<Result<(), _>>(&Err(Box::new(vec![1, 2, 3, 4])));
     }
 
-    #[cfg(all(feature = "std", feature = "validation"))]
+    #[cfg(all(feature = "std", feature = "bytecheck"))]
     mod isolate {
         #[cfg(feature = "wasm")]
         use wasm_bindgen_test::*;

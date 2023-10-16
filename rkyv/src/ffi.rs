@@ -14,8 +14,15 @@ use std::ffi::CStr;
 /// An archived [`CString`](std::ffi::CString).
 ///
 /// Uses a [`RelPtr`] to a `CStr` under the hood.
+#[cfg_attr(
+    feature = "bytecheck",
+    derive(bytecheck::CheckBytes),
+    check_bytes(verify = verify::verify),
+)]
 #[repr(transparent)]
-pub struct ArchivedCString(RelPtr<CStr>);
+pub struct ArchivedCString {
+    ptr: RelPtr<CStr>,
+}
 
 impl ArchivedCString {
     /// Returns the contents of this CString as a slice of bytes.
@@ -38,13 +45,13 @@ impl ArchivedCString {
     /// Extracts a `CStr` slice containing the entire string.
     #[inline]
     pub fn as_c_str(&self) -> &CStr {
-        unsafe { &*self.0.as_ptr() }
+        unsafe { &*self.ptr.as_ptr() }
     }
 
     /// Extracts a pinned mutable `CStr` slice containing the entire string.
     #[inline]
     pub fn pin_mut_c_str(self: Pin<&mut Self>) -> Pin<&mut CStr> {
-        unsafe { self.map_unchecked_mut(|s| &mut *s.0.as_mut_ptr()) }
+        unsafe { self.map_unchecked_mut(|s| &mut *s.ptr.as_mut_ptr()) }
     }
 
     /// Resolves an archived C string from the given C string and parameters.
@@ -172,42 +179,35 @@ pub struct CStringResolver {
     metadata_resolver: MetadataResolver<CStr>,
 }
 
-#[cfg(feature = "validation")]
-const _: () = {
-    use crate::validation::{
-        owned::{CheckOwnedPointerError, OwnedPointerError},
-        ArchiveContext,
-    };
-    use bytecheck::{CheckBytes, Error};
+#[cfg(feature = "bytecheck")]
+mod verify {
+    use core::ffi::CStr;
 
-    impl<C: ArchiveContext + ?Sized> CheckBytes<C> for ArchivedCString
-    where
-        C::Error: Error,
-    {
-        type Error = CheckOwnedPointerError<CStr, C>;
+    use bytecheck::{Error, StructCheckContext};
 
-        #[inline]
-        unsafe fn check_bytes<'a>(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<&'a Self, Self::Error> {
-            let rel_ptr =
-                RelPtr::<CStr>::manual_check_bytes(value.cast(), context)
-                    .map_err(OwnedPointerError::PointerCheckBytesError)?;
-            let ptr = context
-                .check_subtree_rel_ptr(rel_ptr)
-                .map_err(OwnedPointerError::ContextError)?;
+    use crate::{ffi::ArchivedCString, validation::ArchiveContext};
 
-            let range = context
-                .push_prefix_subtree(ptr)
-                .map_err(OwnedPointerError::ContextError)?;
-            CStr::check_bytes(ptr, context)
-                .map_err(OwnedPointerError::ValueCheckBytesError)?;
+    #[inline]
+    pub fn verify<C: ArchiveContext + ?Sized>(
+        value: &ArchivedCString,
+        context: &mut C,
+    ) -> Result<(), C::Error> {
+        let ptr = unsafe {
             context
-                .pop_prefix_range(range)
-                .map_err(OwnedPointerError::ContextError)?;
+                .check_subtree_rel_ptr(&value.ptr)
+                .map_err(|e| e.context(StructCheckContext {
+                    struct_name: "ArchivedCString",
+                    field_name: "ptr",
+                }))?
+        };
 
-            Ok(&*value)
+        let range = unsafe { context.push_prefix_subtree(ptr)? };
+        unsafe {
+            CStr::check_bytes(ptr, context)?;
         }
+        context.pop_prefix_range(range)?;
+
+        Ok(&*value)
     }
-};
+}
+

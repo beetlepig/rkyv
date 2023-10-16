@@ -87,9 +87,11 @@ impl_rend_primitives!(
 
 #[cfg(test)]
 mod tests {
+    use rancor::Failure;
+
     use crate::{
         archived_root, ser::serializers::CoreSerializer, ser::Serializer,
-        Deserialize, Infallible, Serialize,
+        Deserialize, Serialize,
     };
     use core::fmt;
 
@@ -98,7 +100,7 @@ mod tests {
     fn test_archive<T>(value: &T)
     where
         T: fmt::Debug + PartialEq + Serialize<DefaultSerializer>,
-        T::Archived: fmt::Debug + PartialEq<T> + Deserialize<T, Infallible>,
+        T::Archived: fmt::Debug + PartialEq<T> + Deserialize<T, Failure>,
     {
         let mut serializer = DefaultSerializer::default();
         serializer
@@ -109,7 +111,7 @@ mod tests {
 
         let archived_value = unsafe { archived_root::<T>(&buffer[0..len]) };
         assert_eq!(archived_value, value);
-        let mut deserializer = Infallible;
+        let mut deserializer = Failure;
         assert_eq!(
             &archived_value.deserialize(&mut deserializer).unwrap(),
             value

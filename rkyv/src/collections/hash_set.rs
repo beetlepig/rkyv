@@ -13,7 +13,7 @@ use core::{borrow::Borrow, fmt, hash::Hash};
 
 /// An archived `HashSet`. This is a wrapper around a hash map with the same key and a value of
 /// `()`.
-#[cfg_attr(feature = "validation", derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[repr(transparent)]
 pub struct ArchivedHashSet<K>(ArchivedHashMap<K, ()>);
 

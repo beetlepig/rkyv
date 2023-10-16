@@ -21,6 +21,11 @@ use repr::{ArchivedStringRepr, INLINE_CAPACITY};
 /// inside the structure to store the string, and long strings will store a
 /// [`RelPtr`](crate::RelPtr) to a `str` instead.
 #[repr(transparent)]
+#[cfg_attr(
+    feature = "bytecheck",
+    derive(bytecheck::CheckBytes),
+    check_bytes(verify = verify::verify),
+)]
 pub struct ArchivedString(repr::ArchivedStringRepr);
 
 impl ArchivedString {
@@ -228,53 +233,37 @@ pub struct StringResolver {
     pos: usize,
 }
 
-#[cfg(feature = "validation")]
-const _: () = {
-    use crate::validation::{owned::OwnedPointerError, ArchiveContext};
-    use bytecheck::{CheckBytes, Error};
+#[cfg(feature = "bytecheck")]
+mod verify {
+    use bytecheck::CheckBytes;
 
-    impl<C: ArchiveContext + ?Sized> CheckBytes<C> for ArchivedString
-    where
-        C::Error: Error + 'static,
-    {
-        type Error = OwnedPointerError<
-            <ArchivedStringRepr as CheckBytes<C>>::Error,
-            <str as CheckBytes<C>>::Error,
-            C::Error,
-        >;
+    use crate::{string::ArchivedString, validation::ArchiveContext};
 
-        #[inline]
-        unsafe fn check_bytes<'a>(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<&'a Self, Self::Error> {
-            // The repr is always valid
-            let repr = ArchivedStringRepr::check_bytes(value.cast(), context)
-                .map_err(OwnedPointerError::PointerCheckBytesError)?;
-
-            if repr.is_inline() {
-                str::check_bytes(repr.as_str_ptr(), context)
-                    .map_err(OwnedPointerError::ValueCheckBytesError)?;
-            } else {
-                let base = value.cast();
-                let offset = repr.out_of_line_offset();
-                let metadata = repr.len();
-
-                let ptr = context
-                    .check_subtree_ptr::<str>(base, offset, metadata)
-                    .map_err(OwnedPointerError::ContextError)?;
-
-                let range = context
-                    .push_prefix_subtree(ptr)
-                    .map_err(OwnedPointerError::ContextError)?;
-                str::check_bytes(ptr, context)
-                    .map_err(OwnedPointerError::ValueCheckBytesError)?;
-                context
-                    .pop_prefix_range(range)
-                    .map_err(OwnedPointerError::ContextError)?;
+    #[inline]
+    pub fn verify<C: ArchiveContext + ?Sized>(
+        value: &ArchivedString,
+        context: &mut C,
+    ) -> Result<(), C::Error> {
+        if value.repr.is_inline() {
+            unsafe {
+                str::check_bytes(value.repr.as_str_ptr(), context)?;
             }
+        } else {
+            let base = value.cast();
+            let offset = value.repr.out_of_line_offset();
+            let metadata = value.repr.len();
 
-            Ok(&*value)
+            let ptr = unsafe {
+                context.check_subtree_ptr::<str>(base, offset, metadata)?
+            };
+
+            let range = unsafe { context.push_prefix_subtree(ptr)? };
+            unsafe {
+                str::check_bytes(ptr, context)?;
+            }
+            context.pop_prefix_range(range)?;
         }
+
+        Ok(&*value)
     }
-};
+}

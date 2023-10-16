@@ -1,4 +1,4 @@
-#[cfg(feature = "validation")]
+#[cfg(feature = "bytecheck")]
 mod validation;
 
 // Miri does not support the `ctor` crate, so all of the impls here end up being unregistered.

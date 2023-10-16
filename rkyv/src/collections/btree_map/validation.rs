@@ -15,93 +15,9 @@ use core::{
     alloc::{Layout, LayoutError},
     convert::{Infallible, TryFrom},
     fmt,
-    hint::unreachable_unchecked,
     ptr,
 };
 use ptr_meta::Pointee;
-
-impl<K, C> CheckBytes<C> for InnerNodeEntry<K>
-where
-    K: CheckBytes<C>,
-    C: ArchiveContext + ?Sized,
-    C::Error: Error,
-{
-    type Error = K::Error;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<&'a Self, Self::Error> {
-        RelPtr::manual_check_bytes(ptr::addr_of!((*value).ptr), context)
-            .unwrap_or_else(|_| core::hint::unreachable_unchecked());
-        K::check_bytes(ptr::addr_of!((*value).key), context)?;
-
-        Ok(&*value)
-    }
-}
-
-/// An error that can occur while checking a leaf node entry.
-#[derive(Debug)]
-pub enum LeafNodeEntryError<K, V> {
-    /// An error occurred while checking the entry's key.
-    KeyCheckError(K),
-    /// An error occurred while checking the entry's value.
-    ValueCheckError(V),
-}
-
-impl<K: fmt::Display, V: fmt::Display> fmt::Display
-    for LeafNodeEntryError<K, V>
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LeafNodeEntryError::KeyCheckError(e) => {
-                write!(f, "key check error: {}", e)
-            }
-            LeafNodeEntryError::ValueCheckError(e) => {
-                write!(f, "value check error: {}", e)
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-const _: () = {
-    use std::error::Error;
-
-    impl<K: Error + 'static, V: Error + 'static> Error
-        for LeafNodeEntryError<K, V>
-    {
-        fn source(&self) -> Option<&(dyn Error + 'static)> {
-            match self {
-                Self::KeyCheckError(e) => Some(e as &dyn Error),
-                Self::ValueCheckError(e) => Some(e as &dyn Error),
-            }
-        }
-    }
-};
-
-impl<K, V, C> CheckBytes<C> for LeafNodeEntry<K, V>
-where
-    K: CheckBytes<C>,
-    V: CheckBytes<C>,
-    C: Fallible + ?Sized,
-    C::Error: Error,
-{
-    type Error = LeafNodeEntryError<K::Error, V::Error>;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<&'a Self, Self::Error> {
-        K::check_bytes(ptr::addr_of!((*value).key), context)
-            .map_err(LeafNodeEntryError::KeyCheckError)?;
-        V::check_bytes(ptr::addr_of!((*value).value), context)
-            .map_err(LeafNodeEntryError::ValueCheckError)?;
-        Ok(&*value)
-    }
-}
 
 /// Errors that can occur while checking an archived B-tree.
 #[derive(Debug)]
@@ -120,13 +36,6 @@ pub enum ArchivedBTreeMapError<K, V, C> {
         index: usize,
         /// The inner error that occurred
         inner: K,
-    },
-    /// An error occurred while checking the entries of a leaf node
-    CheckLeafNodeEntryError {
-        /// The index of the leaf node entry
-        index: usize,
-        /// The inner error that occurred
-        inner: LeafNodeEntryError<K, V>,
     },
     /// The size of an inner node was invalid
     InvalidNodeSize(usize),
@@ -271,6 +180,19 @@ const _: () = {
     }
 };
 
+/// An error occurred while checking the entries of a leaf node
+#[derive(Debug)]
+struct CheckLeafNodeEntryContext {
+    /// The index of the leaf node entry
+    index: usize,
+}
+
+impl fmt::Display for CheckLeafNodeEntryContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "while checking leaf node entry {}", self.index)
+    }
+}
+
 impl<T> LayoutRaw for Node<[T]> {
     fn layout_raw(
         metadata: <Self as Pointee>::Metadata,
@@ -289,23 +211,16 @@ impl<T> LayoutRaw for Node<[T]> {
     }
 }
 
-type ABTMError<K, V, C> = ArchivedBTreeMapError<
-    <K as CheckBytes<C>>::Error,
-    <V as CheckBytes<C>>::Error,
-    <C as Fallible>::Error,
->;
-
 impl NodeHeader {
     #[inline]
-    unsafe fn manual_check_bytes<'a, K, V, C>(
+    unsafe fn manual_check_bytes<K, V, C>(
         value: *const Self,
         context: &mut C,
-    ) -> Result<&'a Self, ABTMError<K, V, C>>
+    ) -> Result<(), C::Error>
     where
         K: CheckBytes<C>,
         V: CheckBytes<C>,
         C: ArchiveContext + ?Sized,
-        C::Error: Error,
     {
         let raw_node = Self::manual_check_header(value, context)
             .map_err(ArchivedBTreeMapError::ContextError)?;
@@ -337,39 +252,23 @@ impl NodeHeader {
     }
 
     #[inline]
-    unsafe fn manual_check_header<'a, C>(
+    unsafe fn manual_check_header<C: ArchiveContext + ?Sized>(
         value: *const Self,
         context: &mut C,
-    ) -> Result<&'a Self, C::Error>
-    where
-        C: ArchiveContext + ?Sized,
-        C::Error: Error,
-    {
-        CheckBytes::check_bytes(ptr::addr_of!((*value).meta), context)
-            .map_err(
-                // SAFETY: Infallible cannot exist
-                |_: Infallible| unreachable_unchecked(),
-            )?;
-        CheckBytes::check_bytes(ptr::addr_of!((*value).size), context)
-            .map_err(
-                // SAFETY: Infallible cannot exist
-                |_: Infallible| unreachable_unchecked(),
-            )?;
-        RelPtr::manual_check_bytes(ptr::addr_of!((*value).ptr), context)
-            .map_err(
-                // SAFETY: Infallible cannot exist
-                |_: Infallible| unreachable_unchecked(),
-            )?;
+    ) -> Result<(), C::Error> {
+        CheckBytes::check_bytes(ptr::addr_of!((*value).meta), context)?;
+        CheckBytes::check_bytes(ptr::addr_of!((*value).size), context)?;
+        RelPtr::manual_check_bytes(ptr::addr_of!((*value).ptr), context)?;
 
         // All the fields have been checked and this is a valid RawNode
-        Ok(&*value)
+        Ok(())
     }
 
     #[inline]
     unsafe fn manual_check_contents<K, V, C>(
         raw_node: &Self,
         context: &mut C,
-    ) -> Result<(), ABTMError<K, V, C>>
+    ) -> Result<(), C::Error>
     where
         K: CheckBytes<C>,
         V: CheckBytes<C>,
@@ -412,7 +311,7 @@ impl<K> InnerNode<K> {
     #[allow(clippy::type_complexity)]
     fn verify_integrity<'a, V, C>(
         &'a self,
-    ) -> Result<&K, ArchivedBTreeMapError<K::Error, V::Error, C::Error>>
+    ) -> Result<&K, C::Error>
     where
         K: CheckBytes<C> + PartialEq,
         V: CheckBytes<C> + 'a,
@@ -443,12 +342,11 @@ impl<K> InnerNode<K> {
     unsafe fn manual_check_bytes<'a, V, C>(
         value: *const Self,
         context: &mut C,
-    ) -> Result<&'a Self, ABTMError<K, V, C>>
+    ) -> Result<(), C::Error>
     where
         K: CheckBytes<C>,
         V: CheckBytes<C>,
         C: ArchiveContext + ?Sized,
-        C::Error: Error,
     {
         // meta, size, and ptr have already been checked by the check_bytes for RawNode
         let len = ptr_meta::metadata(value);
@@ -474,20 +372,17 @@ impl<K> InnerNode<K> {
     }
 }
 
-impl<K, V, C> CheckBytes<C> for LeafNode<K, V>
+unsafe impl<K, V, C> CheckBytes<C> for LeafNode<K, V>
 where
     K: CheckBytes<C>,
     V: CheckBytes<C>,
     C: ArchiveContext + ?Sized,
-    C::Error: Error,
 {
-    type Error = ArchivedBTreeMapError<K::Error, V::Error, C::Error>;
-
     #[inline]
-    unsafe fn check_bytes<'a>(
+    unsafe fn check_bytes(
         value: *const Self,
         context: &mut C,
-    ) -> Result<&'a Self, Self::Error> {
+    ) -> Result<(), C::Error> {
         // meta, size, and ptr have already been checked by the check_bytes for RawNode
         let len = ptr_meta::metadata(value);
 
@@ -520,19 +415,16 @@ const _: () = {
 
     use crate::primitive::ArchivedUsize;
 
-    impl<K, V, C> CheckBytes<C> for ArchivedBTreeMap<K, V>
+    unsafe impl<K, V, C> CheckBytes<C> for ArchivedBTreeMap<K, V>
     where
         K: CheckBytes<C> + Ord,
         V: CheckBytes<C>,
         C: ArchiveContext + ?Sized,
-        C::Error: Error,
     {
-        type Error = ArchivedBTreeMapError<K::Error, V::Error, C::Error>;
-
-        unsafe fn check_bytes<'a>(
+        unsafe fn check_bytes(
             value: *const Self,
             context: &mut C,
-        ) -> Result<&'a Self, Self::Error> {
+        ) -> Result<(), C::Error> {
             let len = ArchivedUsize::check_bytes(
                 ptr::addr_of!((*value).len),
                 context,

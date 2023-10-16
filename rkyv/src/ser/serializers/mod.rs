@@ -10,7 +10,7 @@ mod std;
 use crate::AlignedVec;
 use crate::{
     ser::{ScratchSpace, Serializer, SharedSerializeRegistry},
-    AlignedBytes, Archive, ArchiveUnsized, Fallible, Infallible,
+    AlignedBytes, Archive, ArchiveUnsized, Fallible,
 };
 use ::core::{alloc::Layout, fmt, ptr::NonNull};
 
@@ -73,7 +73,7 @@ const _: () = {
 
 /// A serializer built from composeable pieces.
 #[derive(Debug)]
-pub struct CompositeSerializer<S = Infallible, C = Infallible, H = Infallible> {
+pub struct CompositeSerializer<S = (), C = (), H = ()> {
     serializer: S,
     scratch: C,
     shared: H,
@@ -237,7 +237,7 @@ impl<S: Fallible, C: Fallible, H: SharedSerializeRegistry>
 pub type CoreSerializer<const S: usize, const C: usize> = CompositeSerializer<
     BufferSerializer<AlignedBytes<S>>,
     BufferScratch<AlignedBytes<C>>,
-    Infallible,
+    (),
 >;
 
 /// A general-purpose serializer suitable for environments where allocations can be made.

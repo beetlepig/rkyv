@@ -86,7 +86,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "validation", derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ArchivedBitArray<A = [ArchivedUsize; 1], O = Lsb0>
 where

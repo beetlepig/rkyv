@@ -1,6 +1,6 @@
 //! An archived version of `Vec`.
 
-mod raw;
+// mod raw;
 
 use crate::{
     primitive::ArchivedUsize,
@@ -15,13 +15,18 @@ use core::{
     slice::SliceIndex,
 };
 
-pub use self::raw::*;
+// pub use self::raw::*;
 
 /// An archived [`Vec`].
 ///
 /// This uses a [`RelPtr`] to a `[T]` under the hood. Unlike
 /// [`ArchivedString`](crate::string::ArchivedString), it does not have an inline representation.
 #[cfg_attr(feature = "strict", repr(C))]
+#[cfg_attr(
+    feature = "bytecheck",
+    derive(bytecheck::CheckBytes),
+    check_bytes(verify = verify::verify),
+)]
 pub struct ArchivedVec<T> {
     ptr: RelPtr<T>,
     len: ArchivedUsize,
@@ -312,69 +317,31 @@ pub struct VecResolver {
     pos: usize,
 }
 
-#[cfg(feature = "validation")]
-const _: () = {
-    use crate::validation::{
-        owned::{CheckOwnedPointerError, OwnedPointerError},
-        ArchiveContext,
+#[cfg(feature = "bytecheck")]
+mod verify {
+    use crate::{
+        vec::ArchivedVec,
+        validation::ArchiveContext,
     };
-    use bytecheck::{CheckBytes, Error};
+    use bytecheck::CheckBytes;
 
-    impl<T> ArchivedVec<T> {
-        /// Checks the bytes of the `ArchivedVec` with the given element checking function.
-        ///
-        /// # Safety
-        ///
-        /// `check_elements` must ensure that the pointer given to it contains only valid data.
-        pub unsafe fn check_bytes_with<'a, C, F>(
-            value: *const Self,
-            context: &mut C,
-            check_elements: F,
-        ) -> Result<&'a Self, CheckOwnedPointerError<[T], C>>
-        where
-            T: CheckBytes<C>,
-            C: ArchiveContext + ?Sized,
-            F: FnOnce(
-                *const [T],
-                &mut C,
-            ) -> Result<(), <[T] as CheckBytes<C>>::Error>,
-        {
-            let rel_ptr =
-                RelPtr::<[T]>::manual_check_bytes(value.cast(), context)
-                    .map_err(OwnedPointerError::PointerCheckBytesError)?;
-            let ptr = context
-                .check_subtree_rel_ptr(rel_ptr)
-                .map_err(OwnedPointerError::ContextError)?;
-
-            let range = context
-                .push_prefix_subtree(ptr)
-                .map_err(OwnedPointerError::ContextError)?;
-            check_elements(ptr, context)
-                .map_err(OwnedPointerError::ValueCheckBytesError)?;
-            context
-                .pop_prefix_range(range)
-                .map_err(OwnedPointerError::ContextError)?;
-
-            Ok(&*value)
-        }
-    }
-
-    impl<T, C> CheckBytes<C> for ArchivedVec<T>
+    pub fn verify<T, C>(
+        value: &ArchivedVec<T>,
+        context: &mut C,
+    ) -> Result<(), C::Error>
     where
         T: CheckBytes<C>,
         C: ArchiveContext + ?Sized,
-        C::Error: Error,
     {
-        type Error = CheckOwnedPointerError<[T], C>;
+        let ptr = unsafe { context.check_subtree_rel_ptr(value.ptr)? };
 
-        #[inline]
-        unsafe fn check_bytes<'a>(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<&'a Self, Self::Error> {
-            Self::check_bytes_with::<C, _>(value, context, |v, c| {
-                <[T]>::check_bytes(v, c).map(|_| ())
-            })
+        let range = unsafe { context.push_prefix_subtree(ptr)? };
+        unsafe {
+            <[T]>::check_bytes(ptr, context)?;
         }
+        context
+            .pop_prefix_range(range)?;
+
+        Ok(&*value)
     }
-};
+}

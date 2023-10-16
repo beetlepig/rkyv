@@ -207,7 +207,7 @@ impl<T: PartialOrd> PartialOrd<RawArchivedVec<T>> for [T] {
     }
 }
 
-#[cfg(feature = "validation")]
+#[cfg(feature = "bytecheck")]
 const _: () = {
     use crate::validation::{owned::CheckOwnedPointerError, ArchiveContext};
     use bytecheck::{CheckBytes, Error};

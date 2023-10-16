@@ -3,7 +3,7 @@
 //! During archiving, hashmaps are built into minimal perfect hashmaps using
 //! [compress, hash and displace](http://cmph.sourceforge.net/papers/esa09.pdf).
 
-#[cfg(feature = "validation")]
+#[cfg(feature = "bytecheck")]
 pub mod validation;
 
 use crate::{

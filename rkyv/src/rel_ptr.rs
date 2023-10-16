@@ -1,8 +1,5 @@
 //! Relative pointer implementations and options.
 
-#[cfg(feature = "validation")]
-mod validation;
-
 use crate::{
     primitive::{
         ArchivedI16, ArchivedI32, ArchivedI64, ArchivedU16, ArchivedU32,
@@ -161,6 +158,7 @@ pub enum RelPtrError {
 /// Relative pointers are *relative*, meaning that the pointee can be moved with the target without
 /// invalidating the pointer. However, if either the pointee or the target move independently, the
 /// pointer will be invalidated.
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[repr(transparent)]
 pub struct RawRelPtr<O> {
     offset: O,
@@ -279,6 +277,7 @@ pub type RawRelPtrU64 = RawRelPtr<ArchivedU64>;
 /// This is a strongly-typed version of [`RawRelPtr`].
 ///
 /// See [`Archive`](crate::Archive) for an example of creating one.
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 pub struct RelPtr<T: ArchivePointee + ?Sized, O> {
     raw_ptr: RawRelPtr<O>,
     metadata: T::ArchivedMetadata,

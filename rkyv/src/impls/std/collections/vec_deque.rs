@@ -97,7 +97,9 @@ where
 mod tests {
     use std::collections::VecDeque;
 
-    use crate::{archived_root, ser::Serializer, Deserialize, Infallible};
+    use rancor::Failure;
+
+    use crate::{archived_root, ser::Serializer, Deserialize};
 
     #[test]
     fn vecdeque() {
@@ -139,7 +141,7 @@ mod tests {
                 assert!(archived.iter().copied().eq(0..n));
 
                 let deserialized: VecDeque<i32> =
-                    archived.deserialize(&mut Infallible).unwrap();
+                    archived.deserialize(&mut Failure).unwrap();
                 assert_eq!(deque, deserialized);
             }
         }

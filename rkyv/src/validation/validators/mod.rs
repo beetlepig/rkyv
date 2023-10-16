@@ -7,7 +7,7 @@ mod util;
 use crate::{
     validation::{
         check_archived_root_with_context, check_archived_value_with_context,
-        ArchiveContext, CheckTypeError, SharedContext,
+        ArchiveContext, SharedContext,
     },
     Archive, Fallible,
 };
@@ -220,7 +220,7 @@ impl<'a> SharedContext for DefaultValidator<'a> {
 pub fn check_archived_value<'a, T: Archive>(
     bytes: &'a [u8],
     pos: usize,
-) -> Result<&T::Archived, CheckTypeError<T::Archived, DefaultValidator<'a>>>
+) -> Result<&T::Archived, <DefaultValidator<'a> as Fallible>::Error>
 where
     T::Archived: CheckBytes<DefaultValidator<'a>>,
 {
@@ -241,7 +241,7 @@ where
 #[inline]
 pub fn check_archived_root<'a, T: Archive>(
     bytes: &'a [u8],
-) -> Result<&'a T::Archived, CheckTypeError<T::Archived, DefaultValidator<'a>>>
+) -> Result<&'a T::Archived, <DefaultValidator<'a> as Fallible>::Error>
 where
     T::Archived: CheckBytes<DefaultValidator<'a>>,
 {

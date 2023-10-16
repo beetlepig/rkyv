@@ -1,8 +1,5 @@
 //! Archived versions of shared pointers.
 
-#[cfg(feature = "validation")]
-pub mod validation;
-
 use crate::{
     ser::{Serializer, SharedSerializeRegistry},
     ArchivePointee, ArchiveUnsized, MetadataResolver, RelPtr, SerializeUnsized,
@@ -18,13 +15,21 @@ use core::{
 /// Because there may be many varieties of shared pointers and they may not be used together, the
 /// flavor helps check that memory is not being shared incorrectly during validation.
 #[repr(transparent)]
-pub struct ArchivedRc<T: ArchivePointee + ?Sized, F>(RelPtr<T>, PhantomData<F>);
+#[cfg_attr(
+    feature = "bytecheck",
+    derive(bytecheck::CheckBytes),
+    check_bytes(verify = verify::verify),
+)]
+pub struct ArchivedRc<T: ArchivePointee + ?Sized, F> {
+    ptr: RelPtr<T>,
+    _phantom: PhantomData<F>,
+}
 
 impl<T: ArchivePointee + ?Sized, F> ArchivedRc<T, F> {
     /// Gets the value of the `ArchivedRc`.
     #[inline]
     pub fn get(&self) -> &T {
-        unsafe { &*self.0.as_ptr() }
+        unsafe { &*self.ptr.as_ptr() }
     }
 
     /// Gets the pinned mutable value of this `ArchivedRc`.
@@ -35,7 +40,7 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRc<T, F> {
     /// of the returned borrow.
     #[inline]
     pub unsafe fn get_pin_mut_unchecked(self: Pin<&mut Self>) -> Pin<&mut T> {
-        self.map_unchecked_mut(|s| &mut *s.0.as_mut_ptr())
+        self.map_unchecked_mut(|s| &mut *s.ptr.as_mut_ptr())
     }
 
     /// Resolves an archived `Rc` from a given reference.
@@ -51,7 +56,7 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRc<T, F> {
         resolver: RcResolver<MetadataResolver<U>>,
         out: *mut Self,
     ) {
-        let (fp, fo) = out_field!(out.0);
+        let (fp, fo) = out_field!(out.ptr);
         value.resolve_unsized(
             pos + fp,
             resolver.pos,
@@ -164,7 +169,7 @@ where
 
 impl<T, F> fmt::Pointer for ArchivedRc<T, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Pointer::fmt(&self.0.base(), f)
+        fmt::Pointer::fmt(&self.ptr.base(), f)
     }
 }
 
@@ -178,6 +183,7 @@ pub struct RcResolver<T> {
 ///
 /// This is essentially just an optional [`ArchivedRc`].
 #[repr(u8)]
+#[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 pub enum ArchivedRcWeak<T: ArchivePointee + ?Sized, F> {
     /// A null weak pointer
     None,
@@ -226,11 +232,11 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRcWeak<T, F> {
         match resolver {
             RcWeakResolver::None => {
                 let out = out.cast::<ArchivedRcWeakVariantNone>();
-                ptr::addr_of_mut!((*out).0).write(ArchivedRcWeakTag::None);
+                ptr::addr_of_mut!((*out).ptr).write(ArchivedRcWeakTag::None);
             }
             RcWeakResolver::Some(resolver) => {
                 let out = out.cast::<ArchivedRcWeakVariantSome<T, F>>();
-                ptr::addr_of_mut!((*out).0).write(ArchivedRcWeakTag::Some);
+                ptr::addr_of_mut!((*out).ptr).write(ArchivedRcWeakTag::Some);
 
                 let (fp, fo) = out_field!(out.1);
                 ArchivedRc::resolve_from_ref(
@@ -293,3 +299,46 @@ struct ArchivedRcWeakVariantSome<T: ArchivePointee + ?Sized, F>(
     ArchivedRcWeakTag,
     ArchivedRc<T, F>,
 );
+
+#[cfg(feature = "bytecheck")]
+mod verify {
+    use core::any::{Any, TypeId};
+
+    use bytecheck::CheckBytes;
+    use ptr_meta::Pointee;
+
+    use crate::{
+        validation::{ArchiveContext, LayoutRaw, SharedContext},
+        ArchivePointee, rc::ArchivedRc,
+    };
+
+    #[inline]
+    pub fn verify<T, F, C>(
+        value: &ArchivedRc<T, F>,
+        context: &mut C,
+    ) -> Result<(), C::Error>
+    where
+        T: ArchivePointee + CheckBytes<C> + LayoutRaw + Pointee + ?Sized + Any,
+        C: ArchiveContext + SharedContext + ?Sized,
+        T::ArchivedMetadata: CheckBytes<C>,
+        F: 'static,
+    {
+        let ptr = unsafe { context.check_rel_ptr(value.rel_ptr)? };
+
+        let type_id = TypeId::of::<ArchivedRc<T, F>>();
+        if context.register_shared_ptr(ptr.cast(), type_id)?
+        {
+            unsafe {
+                context.bounds_check_subtree_ptr(ptr)?;
+            }
+
+            let range = unsafe { context.push_prefix_subtree(ptr)? };
+            unsafe {
+                T::check_bytes(ptr, context)?;
+            }
+            context
+                .pop_prefix_range(range)?;
+        }
+        Ok(())
+    }
+}
