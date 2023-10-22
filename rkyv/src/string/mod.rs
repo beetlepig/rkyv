@@ -10,6 +10,7 @@ use core::{
     pin::Pin,
     str,
 };
+use std::ffi::OsStr;
 use repr::{ArchivedStringRepr, INLINE_CAPACITY};
 
 /// An archived [`String`].
@@ -76,6 +77,13 @@ impl AsRef<str> for ArchivedString {
     #[inline]
     fn as_ref(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl AsRef<OsStr> for ArchivedString {
+    #[inline]
+    fn as_ref(&self) -> &OsStr {
+        self.as_str().as_ref()
     }
 }
 
